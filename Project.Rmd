@@ -1,0 +1,114 @@
+---
+title: "Modelling With Weight Lifting Exercise Dataset"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Required Packages
+```{r}
+library(ggplot2)
+library(caret)
+
+library(randomForest)
+library(e1071)
+library(gbm)
+library(survival)
+library(splines)
+library(plyr)
+library(doParallel)
+```
+
+Load Datasets
+```{r}
+training_data <- read.csv(file = 'pml-training.csv', na.strings = c("#DIV/0"), row.names =  1)
+testing_data <- read.csv(file = 'pml-testing.csv', na.strings = c("#DIV/0"), row.names =  1)
+```
+
+Remove Unnecessary Columns and columns which has greater than 95%, Change y column format to factor:
+
+```{r}
+dim(training_data)
+dim(testing_data)
+
+training_data <- training_data[, 6:dim(training_data)[2]]
+
+wellcol <- !apply(training_data,2,function(x) sum(is.na(x)) > dim(training_data)*0.95 || sum(x == "") > dim(training_data)*0.95)
+training_data <- training_data[, wellcol]
+
+badcol <- nearZeroVar(training_data,saveMetrics = TRUE)
+training_data <- training_data[, badcol$nzv == FALSE]
+
+dim(training_data)
+training_data$classe = factor(training_data$classe)
+
+```
+
+Split dataset into training and cross validation set and prepare test set like training sets:
+
+```{r}
+inTrain <- createDataPartition(training_data$classe, p = 0.6)[[1]]
+crossv <- training_data[-inTrain,]
+training <- training_data[inTrain,]
+
+inTrain <- createDataPartition(crossv$classe, p = 0.75)[[1]]
+crossv_test <- crossv[-inTrain,]
+crossv <- crossv[inTrain,]
+
+
+testing_data <- testing_data[, 6:dim(testing_data)[2]]
+testing_data <- testing_data[, wellcol]
+testing_data$classe <- NA
+testing_data <- testing_data[, badcol$nzv == FALSE]
+
+```
+
+
+Fit data into model and print prediction accuracy on cross validation set:
+
+mod1 = RandomForest
+mod2 = Linear Discriminant Analysis
+
+Random Forest is highest Accuracy Score so that we can test it on cross_val_test set 
+
+```{r}
+mod1 <- randomForest(classe ~ ., data=training)
+mod2 <- train(classe ~ ., data=training, method="lda")
+
+pred1 <- predict(mod1, crossv)
+pred2 <- predict(mod2, crossv)
+
+
+confusionMatrix(pred1, crossv$classe)$overall["Accuracy"]
+confusionMatrix(pred2, crossv$classe)$overall["Accuracy"]
+
+
+```
+
+## Conclusion
+
+Random Forest is have high accuracy to cross validation set and This model suitable for large number of observation.
+
+My variables unscaled and include categorical variables. Random forest can handle that.
+
+
+Submission to Coursera
+```{r}
+
+pml_write_files = function(x){
+n = length(x)
+for(i in 1:n){
+filename = paste0("problem_id_",i,".txt")
+write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+}
+}
+x <- testing_data
+
+answers <- predict(mod1, newdata=x)
+answers
+
+pml_write_files(answers)
+
+```
